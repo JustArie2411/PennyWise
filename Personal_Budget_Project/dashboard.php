@@ -35,6 +35,7 @@ switch ($period) {
         break;
 }
 
+// Filtered income and expenses for the selected period cards
 $inc_stmt = $pdo->prepare("SELECT SUM(amount) AS total FROM income i WHERE i.user_id = ?" . $date_filter_income);
 $inc_stmt->execute([$user_id]);
 $total_income = $inc_stmt->fetch()['total'] ?? 0.00;
@@ -47,11 +48,19 @@ $bud_stmt = $pdo->prepare("SELECT SUM(amount) AS total FROM budgets WHERE user_i
 $bud_stmt->execute([$user_id]);
 $total_planned_budgets = $bud_stmt->fetch()['total'] ?? 0.00;
 
+// To avoid negative unallocated money when viewing filtered short-term periods (like Today/This Week),
+// we calculate overall unallocated pool from total cumulative income vs total budgets, 
+// or you can scope it properly. Let's use overall cumulative income for unallocated money so it doesn't break on daily filters:
+$all_inc_stmt = $pdo->prepare("SELECT SUM(amount) AS total FROM income WHERE user_id = ?");
+$all_inc_stmt->execute([$user_id]);
+$cumulative_income = $all_inc_stmt->fetch()['total'] ?? 0.00;
+
 $sav_contrib_stmt = $pdo->prepare("SELECT SUM(amount) AS total FROM savings_contributions WHERE user_id = ? AND funding_source = 'unallocated'");
 $sav_contrib_stmt->execute([$user_id]);
 $unallocated_savings_contributions = $sav_contrib_stmt->fetch()['total'] ?? 0.00;
 
-$unallocated_money = ($total_income - $total_planned_budgets) - $unallocated_savings_contributions;
+// Unallocated money uses total cumulative income minus total planned budgets
+$unallocated_money = ($cumulative_income - $total_planned_budgets) - $unallocated_savings_contributions;
 
 $sav_stmt = $pdo->prepare("SELECT SUM(current_amount) AS total FROM savings_goals WHERE user_id = ?");
 $sav_stmt->execute([$user_id]);
